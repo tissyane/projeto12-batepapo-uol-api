@@ -22,23 +22,43 @@ const participantSchema = joi.object({
   name: joi.string().required(),
 });
 
+function isUser(participant) {
+  const loggedUser = db
+    .collection("participants")
+    .findOne({ name: participant });
+  return loggedUser;
+}
+
 /* Participants Routes */
 
-app.post("/participants", (req, res) => {
+app.post("/participants", async (req, res) => {
   const { name } = req.body;
-
-  const validation = participantSchema.validate({ name });
-
+  const validation = participantSchema.validate({ name }, { abortEarly: true });
   if (validation.error) {
-    const loginerror = validation.error.details[0].message;
-    res.status(422).send(loginerror);
+    const error = validation.error.details[0].message;
+    res.status(422).send(error);
     return;
   }
-
-  db.collection("participants").insertOne({
-    name: name,
-  });
-  res.sendStatus(201);
+  const loggedUser = await isUser(name);
+  if (loggedUser) {
+    res.sendStatus(409);
+    return;
+  } else {
+    try {
+      await db
+        .collection("participants")
+        .insertOne({ name: name, lastStatus: name });
+      await db.collection("messages").insertOne({
+        from: name,
+        to: "Todos",
+        text: "entra na sala...",
+        type: "status",
+      });
+      res.sendStatus(201);
+    } catch (err) {
+      res.status(500).send(err);
+    }
+  }
 });
 
 app.listen(port, () => console.log("Server listening on 5000"));
