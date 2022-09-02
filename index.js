@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import { MongoClient } from "mongodb";
 import joi from "joi";
+import dayjs from "dayjs";
 // import dotenv from "dotenv"; TODO: Conectar o dotenv
 // dotenv.config();
 
@@ -22,10 +23,8 @@ const participantSchema = joi.object({
   name: joi.string().required(),
 });
 
-function isUser(participant) {
-  const loggedUser = db
-    .collection("participants")
-    .findOne({ name: participant });
+function isUser(username) {
+  const loggedUser = db.collection("participants").findOne({ name: username });
   return loggedUser;
 }
 
@@ -33,10 +32,10 @@ function isUser(participant) {
 
 app.post("/participants", async (req, res) => {
   const { name } = req.body;
-  const validation = participantSchema.validate({ name }, { abortEarly: true });
+  const validation = participantSchema.validate({ name });
   if (validation.error) {
-    const error = validation.error.details[0].message;
-    res.status(422).send(error);
+    const loginError = validation.error.details[0].message;
+    res.status(422).send(loginError);
     return;
   }
   const loggedUser = await isUser(name);
@@ -45,19 +44,33 @@ app.post("/participants", async (req, res) => {
     return;
   } else {
     try {
+      const loginTime = Date.now();
       await db
         .collection("participants")
-        .insertOne({ name: name, lastStatus: name });
+        .insertOne({ name: name, lastStatus: loginTime });
       await db.collection("messages").insertOne({
         from: name,
         to: "Todos",
         text: "entra na sala...",
         type: "status",
+        time: dayjs(loginTime).format("HH:mm:ss"),
       });
       res.sendStatus(201);
     } catch (err) {
       res.status(500).send(err);
     }
+  }
+});
+
+app.get("/participants", async (req, res) => {
+  try {
+    const allParticipants = await db
+      .collection("participants")
+      .find()
+      .toArray();
+    res.send(allParticipants);
+  } catch (err) {
+    res.status(500).send(err);
   }
 });
 
