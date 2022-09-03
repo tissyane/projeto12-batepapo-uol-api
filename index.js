@@ -1,8 +1,8 @@
 import express from "express";
 import cors from "cors";
 import { MongoClient } from "mongodb";
-import joi from "joi";
 import dayjs from "dayjs";
+import { participantSchema } from "./Schema.js";
 // import dotenv from "dotenv"; TODO: Conectar o dotenv
 // dotenv.config();
 
@@ -17,10 +17,6 @@ const mongoClient = new MongoClient("mongodb://localhost:27017");
 let db;
 mongoClient.connect().then(() => {
   db = mongoClient.db("test");
-});
-
-const participantSchema = joi.object({
-  name: joi.string().required(),
 });
 
 function isUser(username) {
@@ -45,15 +41,16 @@ app.post("/participants", async (req, res) => {
   } else {
     try {
       const loginTime = Date.now();
+      const time = dayjs(loginTime).format("HH:mm:ss");
       await db
         .collection("participants")
-        .insertOne({ name: name, lastStatus: loginTime });
+        .insertOne({ name: name, lastStatus: time });
       await db.collection("messages").insertOne({
         from: name,
         to: "Todos",
         text: "entra na sala...",
         type: "status",
-        time: dayjs(loginTime).format("HH:mm:ss"),
+        time: time,
       });
       res.sendStatus(201);
     } catch (err) {
@@ -75,3 +72,4 @@ app.get("/participants", async (req, res) => {
 });
 
 app.listen(port, () => console.log("Server listening on 5000"));
+TODO: "Checar essa mensagem";
