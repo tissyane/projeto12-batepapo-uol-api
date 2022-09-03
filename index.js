@@ -74,7 +74,7 @@ app.get("/participants", async (req, res) => {
 /* Messages Routes */
 
 app.post("/messages", async (req, res) => {
-  const { username } = req.headers.user;
+  const from = req.headers.user;
   const validation = messageSchema.validate(req.body, { abortEarly: false });
   if (validation.error) {
     const messageError = validation.error.details.map(
@@ -83,16 +83,28 @@ app.post("/messages", async (req, res) => {
     res.status(422).send(messageError);
     return;
   }
+  const loggedUser = await isUser(from);
+  if (!loggedUser) {
+    res.status(422).send("Faça login novamente para continuar batendo papo");
+    return;
+  }
 
   try {
     await db.collection("messages").insertOne({
-      from: username,
-      to: req.body.to,
-      text: req.body.text,
-      type: req.body.type,
-      time: time,
+      from,
+      ...req.body,
+      time,
     });
     res.sendStatus(201);
+  } catch (err) {
+    res.status(500).send(err);
+  }
+});
+
+app.get("/messages", async (req, res) => {
+  try {
+    const allMessages = await db.collection("messages").find().toArray();
+    res.send(allMessages);
   } catch (err) {
     res.status(500).send(err);
   }
