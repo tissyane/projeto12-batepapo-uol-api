@@ -24,6 +24,15 @@ function isUser(username) {
   return loggedUser;
 }
 
+function filterMessages(message, username) {
+  return (
+    message.type === "status" ||
+    message.type === "message" ||
+    message.to === username ||
+    message.from === username
+  );
+}
+
 const timeNow = Date.now();
 const time = dayjs(timeNow).format("HH:mm:ss");
 /* Participants Routes */
@@ -102,9 +111,20 @@ app.post("/messages", async (req, res) => {
 });
 
 app.get("/messages", async (req, res) => {
+  const limit = Number(req.query.limit);
+  const username = req.headers.user;
+
   try {
     const allMessages = await db.collection("messages").find().toArray();
-    res.send(allMessages);
+    const filteredMessages = allMessages.filter((message) =>
+      filterMessages(message, username)
+    );
+
+    if (limit) {
+      res.send(filteredMessages.slice(-limit));
+      return;
+    }
+    res.send(filteredMessages);
   } catch (err) {
     res.status(500).send(err);
   }
