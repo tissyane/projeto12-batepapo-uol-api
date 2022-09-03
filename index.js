@@ -2,9 +2,9 @@ import express from "express";
 import cors from "cors";
 import { MongoClient } from "mongodb";
 import dayjs from "dayjs";
-import { participantSchema } from "./Schema.js";
-// import dotenv from "dotenv"; TODO: Conectar o dotenv
-// dotenv.config();
+import { participantSchema, messageSchema } from "./Schema.js";
+import dotenv from "dotenv";
+dotenv.config();
 
 const app = express();
 app.use(cors());
@@ -12,11 +12,11 @@ app.use(express.json());
 
 const port = "5000";
 
-const mongoClient = new MongoClient("mongodb://localhost:27017");
+const mongoClient = new MongoClient(process.env.MONGO_URI);
 
 let db;
 mongoClient.connect().then(() => {
-  db = mongoClient.db("test");
+  db = mongoClient.db("Novo");
 });
 
 function isUser(username) {
@@ -24,6 +24,8 @@ function isUser(username) {
   return loggedUser;
 }
 
+const timeNow = Date.now();
+const time = dayjs(timeNow).format("HH:mm:ss");
 /* Participants Routes */
 
 app.post("/participants", async (req, res) => {
@@ -40,8 +42,6 @@ app.post("/participants", async (req, res) => {
     return;
   } else {
     try {
-      const loginTime = Date.now();
-      const time = dayjs(loginTime).format("HH:mm:ss");
       await db
         .collection("participants")
         .insertOne({ name: name, lastStatus: time });
@@ -66,6 +66,33 @@ app.get("/participants", async (req, res) => {
       .find()
       .toArray();
     res.send(allParticipants);
+  } catch (err) {
+    res.status(500).send(err);
+  }
+});
+
+/* Messages Routes */
+
+app.post("/messages", async (req, res) => {
+  const { username } = req.headers.user;
+  const validation = messageSchema.validate(req.body, { abortEarly: false });
+  if (validation.error) {
+    const messageError = validation.error.details.map(
+      (detail) => detail.message
+    );
+    res.status(422).send(messageError);
+    return;
+  }
+
+  try {
+    await db.collection("messages").insertOne({
+      from: username,
+      to: req.body.to,
+      text: req.body.text,
+      type: req.body.type,
+      time: time,
+    });
+    res.sendStatus(201);
   } catch (err) {
     res.status(500).send(err);
   }
