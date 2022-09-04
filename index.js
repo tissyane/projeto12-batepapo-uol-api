@@ -16,30 +16,22 @@ const mongoClient = new MongoClient(process.env.MONGO_URI);
 
 let db;
 mongoClient.connect().then(() => {
-  db = mongoClient.db("Novo");
+  db = mongoClient.db("bate-papo-uol");
 });
 
-function isUser(username) {
-  const loggedUser = db.collection("participants").findOne({ name: username });
+async function isUser(username) {
+  const loggedUser = await db
+    .collection("participants")
+    .findOne({ name: username });
   return loggedUser;
 }
 
-function filterMessages(message, username) {
-  return (
-    message.type === "status" ||
-    message.type === "message" ||
-    message.to === username ||
-    message.from === username
-  );
-}
-
-const timeNow = Date.now();
-const time = dayjs(timeNow).format("HH:mm:ss");
 /* Participants Routes */
 
 app.post("/participants", async (req, res) => {
   const { name } = req.body;
   const validation = participantSchema.validate({ name });
+
   if (validation.error) {
     const loginError = validation.error.details[0].message;
     res.status(422).send(loginError);
@@ -53,13 +45,13 @@ app.post("/participants", async (req, res) => {
     try {
       await db
         .collection("participants")
-        .insertOne({ name: name, lastStatus: time });
+        .insertOne({ name: name, lastStatus: Date.now() });
       await db.collection("messages").insertOne({
         from: name,
         to: "Todos",
         text: "entra na sala...",
         type: "status",
-        time: time,
+        time: dayjs(Date.now()).format("HH:mm:ss"),
       });
       res.sendStatus(201);
     } catch (err) {
@@ -102,7 +94,7 @@ app.post("/messages", async (req, res) => {
     await db.collection("messages").insertOne({
       from,
       ...req.body,
-      time,
+      time: dayjs(Date.now()).format("HH:mm:ss"),
     });
     res.sendStatus(201);
   } catch (err) {
@@ -115,16 +107,41 @@ app.get("/messages", async (req, res) => {
   const username = req.headers.user;
 
   try {
-    const allMessages = await db.collection("messages").find().toArray();
-    const filteredMessages = allMessages.filter((message) =>
-      filterMessages(message, username)
-    );
+    const messages = await db
+      .collection("messages")
+      .find({
+        $or: [
+          { type: "status" },
+          { type: "message" },
+          { to: username },
+          { from: username },
+        ],
+      })
+      .sort({ _id: -1 })
+      .limit(limit)
+      .toArray();
 
-    if (limit) {
-      res.send(filteredMessages.slice(-limit));
+    res.send(messages.reverse());
+  } catch (err) {
+    res.status(500).send(err);
+    console.log(err);
+  }
+});
+
+/*Status Routes */
+
+app.post("/status", async (req, res) => {
+  const username = req.headers.user;
+
+  try {
+    const { modifiedCount } = await db
+      .collection("participants")
+      .updateOne({ name: username }, { $set: { lastStatus: Date.now() } });
+    if (modifiedCount === 0) {
+      res.status(404);
       return;
     }
-    res.send(filteredMessages);
+    res.status(200);
   } catch (err) {
     res.status(500).send(err);
   }
