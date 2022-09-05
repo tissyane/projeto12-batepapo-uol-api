@@ -16,7 +16,7 @@ const mongoClient = new MongoClient(process.env.MONGO_URI);
 
 let db;
 mongoClient.connect().then(() => {
-  db = mongoClient.db("bate-papo-uol");
+  db = mongoClient.db("uol_api");
 });
 
 async function isUser(username) {
@@ -128,7 +128,7 @@ app.get("/messages", async (req, res) => {
   }
 });
 
-/*Status Routes */
+/*Status Route */
 
 app.post("/status", async (req, res) => {
   const username = req.headers.user;
@@ -147,5 +147,27 @@ app.post("/status", async (req, res) => {
   }
 });
 
-app.listen(port, () => console.log("Server listening on 5000"));
-TODO: "Checar essa mensagem";
+/*Remove inactive Users */
+
+setInterval(async () => {
+  const removeUser = await db
+    .collection("participants")
+    .find({ lastStatus: { $lt: Date.now() - 10000 } })
+    .toArray();
+  const users = removeUser.map((user) => user.name);
+
+  removeUser.forEach(async (user) => {
+    await db
+      .collection("participants")
+      .deleteMany({ lastStatus: { $lt: Date.now() - 10000 } });
+    await db.collection("messages").insertOne({
+      from: user.name,
+      to: "Todos",
+      text: "sai da sala...",
+      type: "status",
+      time: dayjs(Date.now()).format("HH:mm:ss"),
+    });
+  });
+}, 15000);
+
+app.listen(port, () => console.log("Listening on port 5000!"));
