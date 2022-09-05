@@ -1,9 +1,10 @@
 import express from "express";
 import cors from "cors";
-import { MongoClient } from "mongodb";
+import { MongoClient, ObjectId } from "mongodb";
 import dayjs from "dayjs";
 import { participantSchema, messageSchema } from "./Schema.js";
 import dotenv from "dotenv";
+import res from "express/lib/response.js";
 dotenv.config();
 
 const app = express();
@@ -128,20 +129,47 @@ app.get("/messages", async (req, res) => {
   }
 });
 
+app.delete("/messages/:id", async (req, res) => {
+  const user = req.headers.user;
+  const { id } = req.params;
+
+  try {
+    const deleteMessage = await db
+      .collection("messages")
+      .findOne({ _id: new ObjectId(id) });
+
+    if (!deleteMessage) {
+      res.sendStatus(404);
+      return;
+    }
+
+    if (deleteMessage.from !== user) {
+      res.sendStatus(401);
+      return;
+    }
+    await db.collection("messages").deleteOne({ _id: new ObjectId(id) });
+
+    res.sendStatus(204);
+  } catch (error) {
+    res.status(500).send(error);
+  }
+});
+
 /*Status Route */
 
 app.post("/status", async (req, res) => {
   const username = req.headers.user;
+  console.log("Teste");
 
   try {
     const { modifiedCount } = await db
       .collection("participants")
       .updateOne({ name: username }, { $set: { lastStatus: Date.now() } });
     if (modifiedCount === 0) {
-      res.status(404);
+      res.sendStatus(404);
       return;
     }
-    res.status(200);
+    res.sendStatus(200);
   } catch (err) {
     res.status(500).send(err);
   }
@@ -154,12 +182,12 @@ setInterval(async () => {
     .collection("participants")
     .find({ lastStatus: { $lt: Date.now() - 10000 } })
     .toArray();
-  const users = removeUser.map((user) => user.name);
+
+  await db
+    .collection("participants")
+    .deleteMany({ lastStatus: { $lt: Date.now() - 10000 } });
 
   removeUser.forEach(async (user) => {
-    await db
-      .collection("participants")
-      .deleteMany({ lastStatus: { $lt: Date.now() - 10000 } });
     await db.collection("messages").insertOne({
       from: user.name,
       to: "Todos",
