@@ -4,6 +4,7 @@ import { MongoClient, ObjectId } from "mongodb";
 import dayjs from "dayjs";
 import { participantSchema, messageSchema } from "./utils/Schema.js";
 import dotenv from "dotenv";
+import sanitizer from "./utils/Sanitizer.js";
 dotenv.config();
 
 const app = express();
@@ -43,9 +44,9 @@ app.post("/participants", async (req, res) => {
     try {
       await db
         .collection("participants")
-        .insertOne({ name: name, lastStatus: Date.now() });
+        .insertOne({ name: sanitizer(name), lastStatus: Date.now() });
       await db.collection("messages").insertOne({
-        from: name,
+        from: sanitizer(name),
         to: "Todos",
         text: "entra na sala...",
         type: "status",
@@ -74,6 +75,7 @@ app.get("/participants", async (req, res) => {
 
 app.post("/messages", async (req, res) => {
   const from = req.headers.user;
+  const { to, text, type } = req.body;
   const validation = messageSchema.validate(req.body, { abortEarly: false });
   if (validation.error) {
     const messageError = validation.error.details.map(
@@ -91,7 +93,9 @@ app.post("/messages", async (req, res) => {
   try {
     await db.collection("messages").insertOne({
       from,
-      ...req.body,
+      to: sanitizer(to),
+      text: sanitizer(text),
+      type,
       time: dayjs(Date.now()).format("HH:mm:ss"),
     });
     res.sendStatus(201);
@@ -181,8 +185,8 @@ app.put("/messages/:id", async (req, res) => {
       { $and: [{ _id: new ObjectId(id) }, { from: user }] },
       {
         $set: {
-          to,
-          text,
+          to: sanitizer(to),
+          text: sanitizer(text),
           type,
         },
       }
