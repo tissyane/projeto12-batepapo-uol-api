@@ -2,9 +2,8 @@ import express from "express";
 import cors from "cors";
 import { MongoClient, ObjectId } from "mongodb";
 import dayjs from "dayjs";
-import { participantSchema, messageSchema } from "./Schema.js";
+import { participantSchema, messageSchema } from "./utils/Schema.js";
 import dotenv from "dotenv";
-import res from "express/lib/response.js";
 dotenv.config();
 
 const app = express();
@@ -35,13 +34,11 @@ app.post("/participants", async (req, res) => {
 
   if (validation.error) {
     const loginError = validation.error.details[0].message;
-    res.status(422).send(loginError);
-    return;
+    return res.status(422).send(loginError);
   }
   const loggedUser = await isUser(name);
   if (loggedUser) {
-    res.sendStatus(409);
-    return;
+    return res.sendStatus(409);
   } else {
     try {
       await db
@@ -82,13 +79,13 @@ app.post("/messages", async (req, res) => {
     const messageError = validation.error.details.map(
       (detail) => detail.message
     );
-    res.status(422).send(messageError);
-    return;
+    return res.status(422).send(messageError);
   }
   const loggedUser = await isUser(from);
   if (!loggedUser) {
-    res.status(422).send("Faça login novamente para continuar batendo papo");
-    return;
+    return res
+      .status(422)
+      .send("Faça login novamente para continuar batendo papo");
   }
 
   try {
@@ -125,7 +122,6 @@ app.get("/messages", async (req, res) => {
     res.send(messages.reverse());
   } catch (err) {
     res.status(500).send(err);
-    console.log(err);
   }
 });
 
@@ -139,13 +135,11 @@ app.delete("/messages/:id", async (req, res) => {
       .findOne({ _id: new ObjectId(id) });
 
     if (!deleteMessage) {
-      res.sendStatus(404);
-      return;
+      return res.sendStatus(404);
     }
 
     if (deleteMessage.from !== user) {
-      res.sendStatus(401);
-      return;
+      return res.sendStatus(401);
     }
     await db.collection("messages").deleteOne({ _id: new ObjectId(id) });
 
@@ -155,19 +149,61 @@ app.delete("/messages/:id", async (req, res) => {
   }
 });
 
+app.put("/messages/:id", async (req, res) => {
+  const { id } = req.params;
+  const user = req.headers.user;
+  const { to, text, type } = req.body;
+
+  const validation = messageSchema.validate(req.body, { abortEarly: false });
+  if (validation.error) {
+    const messageError = validation.error.details.map(
+      (detail) => detail.message
+    );
+    return res.status(422).send(messageError);
+  }
+  const loggedUser = await isUser(user);
+  if (!loggedUser) {
+    return res.status(422).send("Faça login novamente");
+  }
+
+  try {
+    const updateMessage = await db
+      .collection("messages")
+      .findOne({ _id: new ObjectId(id) });
+    if (!updateMessage) {
+      return res.sendStatus(404);
+    }
+    if (updateMessage.from !== user) {
+      return res.sendStatus(401);
+    }
+
+    await db.collection("messages").updateOne(
+      { $and: [{ _id: new ObjectId(id) }, { from: user }] },
+      {
+        $set: {
+          to,
+          text,
+          type,
+        },
+      }
+    );
+    res.sendStatus(201);
+  } catch (error) {
+    res.status(500).send(error);
+  }
+});
+
 /*Status Route */
 
 app.post("/status", async (req, res) => {
   const username = req.headers.user;
-  console.log("Teste");
 
   try {
     const { modifiedCount } = await db
       .collection("participants")
       .updateOne({ name: username }, { $set: { lastStatus: Date.now() } });
     if (modifiedCount === 0) {
-      res.sendStatus(404);
-      return;
+      return res.sendStatus(404);
     }
     res.sendStatus(200);
   } catch (err) {
